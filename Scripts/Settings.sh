@@ -7,7 +7,7 @@ sed -i "s/luci-theme-bootstrap/luci-theme-$WRT_THEME/g" $(find ./feeds/luci/coll
 #修改immortalwrt.lan关联IP
 sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $(find ./feeds/luci/modules/luci-mod-system/ -type f -name "flash.js")
 #添加编译日期标识
-sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ DaeWRT-$WRT_DATE')/g" $(find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
+#sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ DaeWRT-$WRT_DATE')/g" $(find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
 
 WIFI_SH=$(find ./target/linux/{mediatek/filogic,qualcommax}/base-files/etc/uci-defaults/ -type f -name "*set-wireless.sh" 2>/dev/null)
 WIFI_UC="./package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
@@ -76,3 +76,7 @@ fi
 #亚瑟修复USB2.0日志报错问题
 wget -qO - https://github.com/davidtall/immortalwrt/commit/ce39feb4.patch | patch -p1
 cat ./target/linux/qualcommax/dts/ipq6000-re-ss-01.dts
+
+# 去除所有DaeWRT标识
+sed -i 's/DaeWRT-[^ ]*//g' package/base-files/files/etc/openwrt_release 2>/dev/null
+sed -i 's/DaeWRT-[^ ]*//g' package/base-files/files/usr/lib/os-release 2>/dev/null
