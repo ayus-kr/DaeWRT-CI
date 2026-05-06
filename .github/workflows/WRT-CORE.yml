@@ -1,10 +1,24 @@
 name: WRT-CORE
 
 on:
-  workflow_dispatch:
-  repository_dispatch:
-  schedule:
-    - cron: 0 18 * * *
+  workflow_call:
+    inputs:
+      REPO_URL:
+        required: false
+        type: string
+        default: https://github.com/LiBwrt/openwrt-6.x.git
+      REPO_BRANCH:
+        required: false
+        type: string
+        default: main-nss
+      CONFIG_FILE:
+        required: false
+        type: string
+        default: Config/IPQ60XX-NOWIFI.txt
+      FIRMWARE_TAG:
+        required: false
+        type: string
+        default: IPQ60XX-NOWIFI
 
 permissions:
   contents: write
@@ -21,43 +35,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Initialization environment
+      - name: 初始化环境
         run: |
           sudo apt update -y
           sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib \
           g++-multilib gettext git libncurses-dev libssl-dev python3 python3-distutils \
           rsync unzip zlib1g-dev file wget curl
 
-      - name: Clone source code
+      - name: 克隆源码
         run: |
-          git clone https://github.com/LiBwrt/openwrt-6.x.git wrt
+          git clone ${{ inputs.REPO_URL }} wrt
           cd wrt
-          git checkout main-nss
+          git checkout ${{ inputs.REPO_BRANCH }}
 
-      - name: Load custom feeds
+      - name: 更新 feeds
         run: |
           cd wrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load custom packages
+      - name: 加载第三方插件
         run: |
           chmod +x $GITHUB_WORKSPACE/Scripts/Packages.sh
           cd wrt
           $GITHUB_WORKSPACE/Scripts/Packages.sh
 
-      - name: Generate config
+      - name: 生成配置
         run: |
           chmod +x $GITHUB_WORKSPACE/Scripts/function.sh
           cd wrt
           . $GITHUB_WORKSPACE/Scripts/function.sh
           generate_config
 
-      - name: Custom Settings (强制插件 + 检查)
+      - name: 强制插件 + 校验（核心修复点）
         run: |
           cd wrt
 
-          # === 强制写入插件 ===
+          # ===== 强制写入插件 =====
           echo "CONFIG_PACKAGE_luci-app-lucky=y" >> .config
           echo "CONFIG_PACKAGE_lucky=y" >> .config
 
@@ -68,42 +82,42 @@ jobs:
           echo "CONFIG_PACKAGE_luci-app-microsocks=y" >> .config
           echo "CONFIG_PACKAGE_microsocks=y" >> .config
 
-          # === 应用配置 ===
+          # ===== 应用配置 =====
           make defconfig
 
           echo "========== 插件检查 =========="
           grep -E "lucky|mosdns|microsocks" .config || true
 
-          # === 强制校验（防止编译出垃圾固件）===
-          grep -q "^CONFIG_PACKAGE_luci-app-lucky=y" .config || exit 1
-          grep -q "^CONFIG_PACKAGE_lucky=y" .config || exit 1
+          # ===== 强制校验（失败直接终止）=====
+          grep -q "^CONFIG_PACKAGE_luci-app-lucky=y" .config || { echo "ERROR: lucky未启用"; exit 1; }
+          grep -q "^CONFIG_PACKAGE_lucky=y" .config || { echo "ERROR: lucky核心未启用"; exit 1; }
 
-          grep -q "^CONFIG_PACKAGE_luci-app-mosdns=y" .config || exit 1
-          grep -q "^CONFIG_PACKAGE_mosdns=y" .config || exit 1
+          grep -q "^CONFIG_PACKAGE_luci-app-mosdns=y" .config || { echo "ERROR: mosdns未启用"; exit 1; }
+          grep -q "^CONFIG_PACKAGE_mosdns=y" .config || { echo "ERROR: mosdns核心未启用"; exit 1; }
 
-          grep -q "^CONFIG_PACKAGE_luci-app-microsocks=y" .config || exit 1
-          grep -q "^CONFIG_PACKAGE_microsocks=y" .config || exit 1
+          grep -q "^CONFIG_PACKAGE_luci-app-microsocks=y" .config || { echo "ERROR: microsocks未启用"; exit 1; }
+          grep -q "^CONFIG_PACKAGE_microsocks=y" .config || { echo "ERROR: microsocks核心未启用"; exit 1; }
 
-      - name: Download package
+      - name: 下载依赖
         run: |
           cd wrt
           make download -j$(nproc)
 
-      - name: Compile firmware
+      - name: 编译固件
         run: |
           cd wrt
           make -j$(nproc) || make -j1 V=s
 
-      - name: Upload firmware
+      - name: 上传固件
         uses: actions/upload-artifact@v4
         with:
           name: firmware
           path: wrt/bin/targets/
 
-      - name: Release firmware
+      - name: 发布固件
         uses: ncipollo/release-action@v1
         with:
-          tag: NOWIFI-$(date +%Y%m%d-%H%M)
+          tag: ${{ inputs.FIRMWARE_TAG }}-$(date +%Y%m%d-%H%M)
           artifacts: "wrt/bin/targets/*/*/*"
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
